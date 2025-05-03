@@ -344,11 +344,10 @@ class RestrictionService extends Component
 
         $entriesService = Craft::$app->getEntries();
         
-        // If there is no section id bypass this check
-        if (!$entry->sectionId) {
-            return true;
-        }
-        $entrySection = $entriesService->getSectionById($entry->sectionId)->handle;
+        // If there is no section id this is a nested entry (aka matrix block), look for the root owner's section id.
+        $sectionIdToTest = $entry->sectionId ? $entry->sectionId : $entry->getRootOwner()->sectionId;
+        
+        $entrySection = $entriesService->getSectionById($sectionIdToTest)->handle;
 
         if (!in_array($entrySection, $authorOnlySections)) {
             return true;
