@@ -147,11 +147,7 @@ class RestrictionService extends Component
      */
     public function shouldRestrictFields(): bool
     {
-        if (Craft::$app->getRequest()->isConsoleRequest || Craft::$app->getRequest()->isCpRequest) {
-            return false;
-        }
-
-        return true;
+        return Craft::$app->requestedRoute === 'graphql/api';
     }
 
     /**
@@ -343,11 +339,7 @@ class RestrictionService extends Component
         $authorOnlySections = $user ? $this->getAuthorOnlySections($user, 'mutation') : [];
 
         $entriesService = Craft::$app->getEntries();
-        
-        // If there is no section id this is a nested entry (aka matrix block), look for the root owner's section id.
-        $sectionIdToTest = $entry->sectionId ? $entry->sectionId : $entry->getRootOwner()->sectionId;
-        
-        $entrySection = $entriesService->getSectionById($sectionIdToTest)->handle;
+        $entrySection = $entriesService->getSectionById($entry->sectionId)->handle;
 
         if (!in_array($entrySection, $authorOnlySections)) {
             return true;
