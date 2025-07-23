@@ -120,7 +120,7 @@ class RestrictionService extends Component
 
         foreach ($resolvers as $name => $resolver) {
             if (isset($event->queries[$name])) {
-                $event->queries[$name]['resolver'] = $resolver;
+                $event->queries[$name]['resolve'] = $resolver;
             }
         }
     }
