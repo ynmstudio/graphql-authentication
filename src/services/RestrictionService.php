@@ -14,6 +14,7 @@ use craft\events\ExecuteGqlQueryEvent;
 use craft\events\ModelEvent;
 use craft\events\RegisterGqlQueriesEvent;
 use craft\helpers\StringHelper;
+use craft\fieldlayoutelements\CustomField as FieldLayoutCustomField;
 use craft\models\GqlSchema;
 use craft\services\Entries;
 use craft\services\Gql;
@@ -31,10 +32,11 @@ use yii\base\Event;
 class RestrictionService extends Component
 {
     /**
-     * @var array<string,array<int,string>>
+     * Map of field handles to any handle overwrites defined in field layouts.
+     *
+     * @var array|null
      */
-    private array $fieldHandleOverrides = [];
-
+    private ?array $fieldHandleOverwrites = null;
     // Public Methods
     // =========================================================================
 
@@ -250,6 +252,9 @@ class RestrictionService extends Component
         }));
         $queryFields = $this->expandHandles($queryFields);
         $privateFields = $this->expandHandles($privateFields);
+
+        $queryFields = $this->applyHandleOverwrites($queryFields);
+        $privateFields = $this->applyHandleOverwrites($privateFields);
 
         foreach ($definitions as $definition) {
             /** @phpstan-ignore-next-line */
@@ -634,5 +639,60 @@ class RestrictionService extends Component
         }
 
         return true;
+    }
+
+    /**
+     * Returns an array mapping field handles to any handle overwrites defined
+     * within field layouts.
+     *
+     * @return array<string, string[]>
+     */
+    private function getFieldHandleOverwrites(): array
+    {
+        if ($this->fieldHandleOverwrites !== null) {
+            return $this->fieldHandleOverwrites;
+        }
+
+        $overwrites = [];
+        $fieldsService = Craft::$app->getFields();
+
+        foreach ($fieldsService->getAllLayouts() as $layout) {
+            foreach ($layout->getTabs() as $tab) {
+                foreach ($tab->getElements() as $element) {
+                    if ($element instanceof FieldLayoutCustomField) {
+                        $field = $element->getField();
+                        $override = $element->handle;
+                        if ($override && $override !== $field->handle) {
+                            $overwrites[$field->handle][] = $override;
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->fieldHandleOverwrites = $overwrites;
+
+        return $this->fieldHandleOverwrites;
+    }
+
+    /**
+     * Expands a list of field handles to include any handle overwrites.
+     *
+     * @param string[] $handles
+     * @return string[]
+     */
+    private function applyHandleOverwrites(array $handles): array
+    {
+        $overwrites = $this->getFieldHandleOverwrites();
+
+        foreach ($handles as $handle) {
+            if (!empty($overwrites[$handle])) {
+                foreach ($overwrites[$handle] as $alias) {
+                    $handles[] = $alias;
+                }
+            }
+        }
+
+        return array_values(array_unique($handles));
     }
 }
