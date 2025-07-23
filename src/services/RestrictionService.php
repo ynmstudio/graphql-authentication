@@ -13,13 +13,6 @@ use craft\elements\User;
 use craft\events\ExecuteGqlQueryEvent;
 use craft\events\ModelEvent;
 use craft\events\RegisterGqlQueriesEvent;
-use craft\gql\arguments\elements\Asset as AssetArguments;
-use craft\gql\arguments\elements\Entry as EntryArguments;
-use craft\gql\arguments\elements\GlobalSet as GlobalSetArguments;
-use craft\gql\interfaces\elements\Asset as AssetInterface;
-use craft\gql\interfaces\elements\Entry as EntryInterface;
-use craft\gql\interfaces\elements\GlobalSet as GlobalSetInterface;
-use craft\helpers\Gql as GqlHelper;
 use craft\helpers\StringHelper;
 use craft\fieldlayoutelements\CustomField as FieldLayoutCustomField;
 use craft\models\GqlSchema;
@@ -29,7 +22,6 @@ use GraphQL\Error\Error;
 use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\Parser;
-use GraphQL\Type\Definition\Type;
 use InvalidArgumentException;
 use jamesedmonston\graphqlauthentication\GraphqlAuthentication;
 use jamesedmonston\graphqlauthentication\resolvers\Asset as AssetResolver;
@@ -258,6 +250,8 @@ class RestrictionService extends Component
         $privateFields = array_keys(array_filter($fieldPermissions, function($permission) {
             return $permission === 'private';
         }));
+        $queryFields = $this->expandHandles($queryFields);
+        $privateFields = $this->expandHandles($privateFields);
 
         $queryFields = $this->applyHandleOverwrites($queryFields);
         $privateFields = $this->applyHandleOverwrites($privateFields);
@@ -476,6 +470,45 @@ class RestrictionService extends Component
         }));
 
         return $authorOnlyVolumes;
+    }
+
+    private function buildFieldHandleOverrides(): void
+    {
+        if (!empty($this->fieldHandleOverrides)) {
+            return;
+        }
+
+        $fieldsService = Craft::$app->getFields();
+        $elementTypes = [Entry::class, Asset::class, GlobalSet::class, User::class];
+
+        foreach ($elementTypes as $type) {
+            foreach ($fieldsService->getLayoutsByType($type) as $layout) {
+                foreach ($layout->getCustomFields() as $layoutField) {
+                    $field = $layoutField->getField();
+                    if (!$field) {
+                        continue;
+                    }
+                    $default = $field->handle;
+                    $handle = $layoutField->attribute ?? $layoutField->handle ?? $default;
+                    if ($handle !== $default) {
+                        $this->fieldHandleOverrides[$default][] = $handle;
+                    }
+                }
+            }
+        }
+    }
+
+    private function expandHandles(array $handles): array
+    {
+        $this->buildFieldHandleOverrides();
+        $expanded = [];
+        foreach ($handles as $handle) {
+            $expanded[] = $handle;
+            foreach ($this->fieldHandleOverrides[$handle] ?? [] as $extra) {
+                $expanded[] = $extra;
+            }
+        }
+        return array_values(array_unique($expanded));
     }
 
     // Protected Methods
