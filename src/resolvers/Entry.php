@@ -133,6 +133,10 @@ class Entry extends ElementResolver
             }
         }
 
+        if (static::$sectionHandle) {
+            $query->section(static::$sectionHandle);
+        }
+
         return $query;
     }
 
