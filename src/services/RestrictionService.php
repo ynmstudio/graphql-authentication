@@ -115,8 +115,12 @@ class RestrictionService extends Component
 
         foreach (Craft::$app->getEntries()->getAllSections() as $section) {
             // "Entries" was added in Craft 5.6.5
-            $resolvers[$section->handle] = EntryResolver::class . '::resolve';
-            $resolvers["{$section->handle}Entries"] = EntryResolver::class . '::resolve';
+            $resolvers[$section->handle] = function ($source, $arguments, $context, $resolveInfo) use ($section) {
+                return EntryResolver::resolveWithSection($source, $arguments, $context, $resolveInfo, $section->handle);
+            };
+            $resolvers["{$section->handle}Entries"] = function ($source, $arguments, $context, $resolveInfo) use ($section) {
+                return EntryResolver::resolveWithSection($source, $arguments, $context, $resolveInfo, $section->handle);
+            };
         }
 
         foreach ($resolvers as $name => $resolver) {
