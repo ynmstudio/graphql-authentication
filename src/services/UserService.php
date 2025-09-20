@@ -112,10 +112,12 @@ class UserService extends Component
             'args' => [
                 'email' => Type::nonNull(Type::string()),
                 'password' => Type::nonNull(Type::string()),
+                'sessionOnly' => Type::boolean(),
             ],
             'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService, $permissionsService) {
                 $email = $arguments['email'];
                 $password = $arguments['password'];
+                $sessionOnly = $arguments['sessionOnly'] ?? false;
 
                 if (!$user = $usersService->getUserByUsernameOrEmail($email)) {
                     $errorService->throw($settings->invalidLogin);
@@ -172,26 +174,26 @@ class UserService extends Component
                 $requiresTwoFactor = false;
 
                 // todo: add 2FA support
-//                if (
-//                    Craft::$app->plugins->isPluginEnabled('two-factor-authentication') &&
-//                    $settings->allowTwoFactorAuthentication
-//                ) {
-//                    /** @var Verify $verifyService */
-//                    $verifyService = TwoFactorAuth::$plugin->verify;
-//                    $requiresTwoFactor = $verifyService->isEnabled($user);
-//                }
-//
-//                if ($requiresTwoFactor) {
-//                    $token = [
-//                        'jwt' => null,
-//                        'jwtExpiresAt' => null,
-//                        'refreshToken' => null,
-//                        'refreshTokenExpiresAt' => null,
-//                    ];
-//                } else {
-                    $this->_updateLastLogin($user);
-                    $token = $tokenService->create($user, $schemaId);
-//                }
+                //                if (
+                //                    Craft::$app->plugins->isPluginEnabled('two-factor-authentication') &&
+                //                    $settings->allowTwoFactorAuthentication
+                //                ) {
+                //                    /** @var Verify $verifyService */
+                //                    $verifyService = TwoFactorAuth::$plugin->verify;
+                //                    $requiresTwoFactor = $verifyService->isEnabled($user);
+                //                }
+                //
+                //                if ($requiresTwoFactor) {
+                //                    $token = [
+                //                        'jwt' => null,
+                //                        'jwtExpiresAt' => null,
+                //                        'refreshToken' => null,
+                //                        'refreshTokenExpiresAt' => null,
+                //                    ];
+                //                } else {
+                $this->_updateLastLogin($user);
+                $token = $tokenService->create($user, $schemaId, $sessionOnly);
+                //                }
 
                 return $this->getResponseFields($user, $schemaId, $token, $requiresTwoFactor);
             },
@@ -208,18 +210,20 @@ class UserService extends Component
                         'username' => Type::string(),
                         'fullName' => Type::string(),
                         'preferredLanguage' => Type::string(),
+                        'sessionOnly' => Type::boolean(),
                     ],
                     $userArguments
                 ),
                 'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService) {
                     $schemaId = GqlSchemaRecord::find()->select(['id'])->where(['name' => $settings->schemaName])->scalar();
+                    $sessionOnly = $arguments['sessionOnly'] ?? false;
 
                     if (!$schemaId) {
                         $errorService->throw($settings->invalidSchema);
                     }
 
                     $user = $this->create($arguments, $settings->userGroup);
-                    $token = $tokenService->create($user, $schemaId);
+                    $token = $tokenService->create($user, $schemaId, $sessionOnly);
 
                     return $this->getResponseFields($user, $schemaId, $token);
                 },
@@ -247,19 +251,21 @@ class UserService extends Component
                             'username' => Type::string(),
                             'fullName' => Type::string(),
                             'preferredLanguage' => Type::string(),
+                            'sessionOnly' => Type::boolean(),
                         ],
                         $userArguments
                     ),
                     'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $userGroup) {
                         $schemaName = $settings->granularSchemas['group-' . $userGroup->id]['schemaName'] ?? null;
                         $schemaId = GqlSchemaRecord::find()->select(['id'])->where(['name' => $schemaName])->scalar();
+                        $sessionOnly = $arguments['sessionOnly'] ?? false;
 
                         if (!$schemaId) {
                             $errorService->throw($settings->invalidSchema);
                         }
 
                         $user = $this->create($arguments, $userGroup->id);
-                        $token = $tokenService->create($user, $schemaId);
+                        $token = $tokenService->create($user, $schemaId, $sessionOnly);
 
                         return $this->getResponseFields($user, $schemaId, $token);
                     },
