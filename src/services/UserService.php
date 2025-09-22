@@ -86,7 +86,6 @@ class UserService extends Component
 
         $elementsService = Craft::$app->getElements();
         $usersService = Craft::$app->getUsers();
-        $permissionsService = Craft::$app->getUserPermissions();
         $volumesService = Craft::$app->getVolumes();
         $projectConfigService = Craft::$app->getProjectConfig();
         $fieldsService = Craft::$app->getFields();
@@ -113,7 +112,7 @@ class UserService extends Component
                 'email' => Type::nonNull(Type::string()),
                 'password' => Type::nonNull(Type::string()),
             ],
-            'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService, $permissionsService) {
+            'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService) {
                 $email = $arguments['email'];
                 $password = $arguments['password'];
 
@@ -373,7 +372,7 @@ class UserService extends Component
                     'newPassword' => Type::nonNull(Type::string()),
                     'confirmPassword' => Type::nonNull(Type::string()),
                 ],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService, $permissionsService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
 
                     $currentPassword = $arguments['currentPassword'];
@@ -493,7 +492,7 @@ class UserService extends Component
                     'password' => Type::nonNull(Type::string()),
                     'confirmPassword' => Type::nonNull(Type::string()),
                 ],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $permissionsService, $usersService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
@@ -520,7 +519,7 @@ class UserService extends Component
                 'description' => 'Deletes authenticated password-less user. Returns success message.',
                 'type' => Type::nonNull(Type::string()),
                 'args' => [],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $permissionsService, $usersService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
