@@ -564,15 +564,12 @@ class UserService extends Component
             $user->fullName = $fullName;
         }
 
-        if ($password) {
-            $user->newPassword = $password;
-        }
-
         $this->_saveCustomFields($arguments, $user);
 
         $projectConfigService = Craft::$app->getProjectConfig();
         $requiresVerification = $projectConfigService->get('users.requireEmailVerification');
         $deactivateByDefault = $projectConfigService->get('users.deactivateByDefault');
+        $suspendByDefault = $projectConfigService->get('users.suspendByDefault');
 
         $settings = GraphqlAuthentication::$settings;
         $skipSocialActivation = $settings->skipSocialActivation;
