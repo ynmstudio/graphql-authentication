@@ -187,6 +187,8 @@ class UserService extends Component
             },
         ];
 
+        $deferPublicRegistrationPassword = Craft::$app->getConfig()->getGeneral()->deferPublicRegistrationPassword;
+
         if ($settings->permissionType === 'single' && $settings->allowRegistration) {
             $event->mutations['register'] = [
                 'description' => 'Registers a user. Returns user and token.',
@@ -194,7 +196,7 @@ class UserService extends Component
                 'args' => array_merge(
                     [
                         'email' => Type::nonNull(Type::string()),
-                        'password' => Type::nonNull(Type::string()),
+                        'password' => $deferPublicRegistrationPassword ? Type::string() : Type::nonNull(Type::string()),
                         'username' => Type::string(),
                         'fullName' => Type::string(),
                         'preferredLanguage' => Type::string(),
@@ -209,8 +211,13 @@ class UserService extends Component
                     }
 
                     $user = $this->create($arguments, $settings->userGroup);
-                    $token = $tokenService->create($user, $schemaId);
 
+                    if ($user->status !== 'active') {
+                        $errorService->throw($settings->userNotActivated);
+                    }
+
+
+                    $token = $tokenService->create($user, $schemaId);
                     return $this->getResponseFields($user, $schemaId, $token);
                 },
             ];
@@ -233,7 +240,7 @@ class UserService extends Component
                     'args' => array_merge(
                         [
                             'email' => Type::nonNull(Type::string()),
-                            'password' => Type::nonNull(Type::string()),
+                            'password' => $deferPublicRegistrationPassword ? Type::string() : Type::nonNull(Type::string()),
                             'username' => Type::string(),
                             'fullName' => Type::string(),
                             'preferredLanguage' => Type::string(),
@@ -249,8 +256,12 @@ class UserService extends Component
                         }
 
                         $user = $this->create($arguments, $userGroup->id);
-                        $token = $tokenService->create($user, $schemaId);
 
+                        if ($user->status !== 'active') {
+                            $errorService->throw($settings->userCreatedNotActivated);
+                        }
+
+                        $token = $tokenService->create($user, $schemaId);
                         return $this->getResponseFields($user, $schemaId, $token);
                     },
                 ];
@@ -547,7 +558,7 @@ class UserService extends Component
     public function create(array $arguments, int $userGroup, bool $social = false): User
     {
         $email = $arguments['email'];
-        $password = $arguments['password'];
+        $password = $arguments['password'] ?? null;
         $username = $arguments['username'] ?? null;
         $fullName = $arguments['fullName'] ?? null;
 
@@ -555,6 +566,10 @@ class UserService extends Component
         $user->username = $email;
         $user->email = $email;
         $user->active = true;
+
+        if ($password) {
+            $user->newPassword = $password;
+        }
 
         if ($username) {
             $user->username = $username;
