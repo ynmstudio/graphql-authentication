@@ -248,7 +248,7 @@ class TwoFactorService extends Component
      *
      * @param User $user
      */
-    private function twoFactorEnabled(User $user) {
+    public function twoFactorEnabled(User $user) {
         $secret = $this->secretFromDb($user);
         return (bool) $secret;
     }
