@@ -213,9 +213,8 @@ class UserService extends Component
                     $user = $this->create($arguments, $settings->userGroup);
 
                     if ($user->status !== 'active') {
-                        $errorService->throw($settings->userNotActivated);
+                        $errorService->throw($settings->useruserCreatedNotActivatedNotActivated);
                     }
-
 
                     $token = $tokenService->create($user, $schemaId);
                     return $this->getResponseFields($user, $schemaId, $token);
