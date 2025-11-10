@@ -572,7 +572,7 @@ class UserService extends Component
 
         $projectConfigService = Craft::$app->getProjectConfig();
         $requiresVerification = $projectConfigService->get('users.requireEmailVerification');
-        $suspendByDefault = $projectConfigService->get('users.suspendByDefault');
+        $deactivateByDefault = $projectConfigService->get('users.deactivateByDefault');
 
         $settings = GraphqlAuthentication::$settings;
         $skipSocialActivation = $settings->skipSocialActivation;
@@ -584,6 +584,11 @@ class UserService extends Component
 
         if ($social && $skipSocialActivation) {
             $user->active = true;
+            $user->pending = false;
+        }
+
+        if ($deactivateByDefault) {
+            $user->active = false;
             $user->pending = false;
         }
 
