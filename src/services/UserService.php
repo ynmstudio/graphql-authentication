@@ -86,7 +86,6 @@ class UserService extends Component
 
         $elementsService = Craft::$app->getElements();
         $usersService = Craft::$app->getUsers();
-        $permissionsService = Craft::$app->getUserPermissions();
         $volumesService = Craft::$app->getVolumes();
         $projectConfigService = Craft::$app->getProjectConfig();
         $fieldsService = Craft::$app->getFields();
@@ -113,7 +112,7 @@ class UserService extends Component
                 'email' => Type::nonNull(Type::string()),
                 'password' => Type::nonNull(Type::string()),
             ],
-            'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService, $permissionsService) {
+            'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService) {
                 $email = $arguments['email'];
                 $password = $arguments['password'];
 
@@ -125,15 +124,7 @@ class UserService extends Component
                     $errorService->throw($settings->userNotActivated);
                 }
 
-                $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                if (!in_array('accessCp', $userPermissions)) {
-                    $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
-                }
-
                 if (!$user->authenticate($password)) {
-                    $permissionsService->saveUserPermissions($user->id, $userPermissions);
-
                     switch ($user->authError) {
                         case User::AUTH_PASSWORD_RESET_REQUIRED:
                             $usersService->sendPasswordResetEmail($user);
@@ -153,7 +144,6 @@ class UserService extends Component
                     }
                 }
 
-                $permissionsService->saveUserPermissions($user->id, $userPermissions);
                 $schemaId = GqlSchemaRecord::find()->select(['id'])->where(['name' => $settings->schemaName])->scalar();
 
                 if ($settings->permissionType === 'multiple') {
@@ -382,7 +372,7 @@ class UserService extends Component
                     'newPassword' => Type::nonNull(Type::string()),
                     'confirmPassword' => Type::nonNull(Type::string()),
                 ],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService, $permissionsService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
 
                     $currentPassword = $arguments['currentPassword'];
@@ -393,20 +383,11 @@ class UserService extends Component
                         $errorService->throw($settings->invalidPasswordMatch);
                     }
 
-                    $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                    if (!in_array('accessCp', $userPermissions)) {
-                        $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
-                    }
-
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
                     if (!$user->authenticate($currentPassword)) {
-                        $permissionsService->saveUserPermissions($user->id, $userPermissions);
                         $errorService->throw($settings->invalidPasswordUpdate);
                     }
-
-                    $permissionsService->saveUserPermissions($user->id, $userPermissions);
 
                     $user->newPassword = $newPassword;
 
@@ -511,7 +492,7 @@ class UserService extends Component
                     'password' => Type::nonNull(Type::string()),
                     'confirmPassword' => Type::nonNull(Type::string()),
                 ],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $permissionsService, $usersService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
@@ -524,14 +505,7 @@ class UserService extends Component
                         }
                     }
 
-                    $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                    if (!in_array('accessCp', $userPermissions)) {
-                        $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
-                    }
-
                     if (!$user->authenticate($password)) {
-                        $permissionsService->saveUserPermissions($user->id, $userPermissions);
                         $errorService->throw($settings->invalidLogin);
                     }
 
@@ -545,18 +519,12 @@ class UserService extends Component
                 'description' => 'Deletes authenticated password-less user. Returns success message.',
                 'type' => Type::nonNull(Type::string()),
                 'args' => [],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $permissionsService, $usersService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
                     if ($user->password) {
                         $errorService->throw($settings->userHasPassword);
-                    }
-
-                    $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                    if (!in_array('accessCp', $userPermissions)) {
-                        $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
                     }
 
                     $elementsService->deleteElement($user);
