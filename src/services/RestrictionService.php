@@ -13,22 +13,13 @@ use craft\elements\User;
 use craft\events\ExecuteGqlQueryEvent;
 use craft\events\ModelEvent;
 use craft\events\RegisterGqlQueriesEvent;
-use craft\gql\arguments\elements\Asset as AssetArguments;
-use craft\gql\arguments\elements\Entry as EntryArguments;
-use craft\gql\arguments\elements\GlobalSet as GlobalSetArguments;
-use craft\gql\interfaces\elements\Asset as AssetInterface;
-use craft\gql\interfaces\elements\Entry as EntryInterface;
-use craft\gql\interfaces\elements\GlobalSet as GlobalSetInterface;
-use craft\helpers\Gql as GqlHelper;
 use craft\helpers\StringHelper;
 use craft\models\GqlSchema;
-use craft\services\Entries;
 use craft\services\Gql;
 use GraphQL\Error\Error;
 use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\Parser;
-use GraphQL\Type\Definition\Type;
 use InvalidArgumentException;
 use jamesedmonston\graphqlauthentication\GraphqlAuthentication;
 use jamesedmonston\graphqlauthentication\resolvers\Asset as AssetResolver;
@@ -311,6 +302,11 @@ class RestrictionService extends Component
                 if ($e instanceof NestedElementInterface && $e->getOwnerId()) {
                     $this->restrictMutationFieldsForElement($e);
                 } elseif ($e instanceof Entry) {
+                    if (!$e->id) {
+                        Craft::warning('Skipping Entry with null ID — likely a Matrix block.', __METHOD__);
+                        continue;
+                    }
+
                     $this->_ensureValidEntry($e->id, $element->siteId);
                 } elseif ($e instanceof Asset) {
                     $this->_ensureValidAsset($e->id);

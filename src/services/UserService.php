@@ -2,8 +2,6 @@
 
 namespace jamesedmonston\graphqlauthentication\services;
 
-use born05\twofactorauthentication\Plugin as TwoFactorAuth;
-use born05\twofactorauthentication\services\Verify;
 use Craft;
 use craft\base\Component;
 use craft\base\Field;
@@ -17,10 +15,8 @@ use craft\gql\resolvers\mutations\Asset;
 use craft\gql\types\input\File;
 use craft\helpers\Template;
 use craft\records\GqlSchema as GqlSchemaRecord;
-use craft\services\Fields;
 use craft\services\Gql;
 use GraphQL\Error\Error;
-use GraphQL\GraphQL;
 use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Definition\Type;
 use jamesedmonston\graphqlauthentication\gql\Auth;
