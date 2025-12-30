@@ -293,20 +293,25 @@ class RestrictionService extends Component
 
     private function restrictMutationFieldsForElement(ElementInterface $element): void
     {
+        if (!$element->id) {
+            Craft::warning('Skipping Element with null ID — likely a Matrix block or unsaved entry.', __METHOD__);
+            return;
+        }
+
         foreach ($element->getFieldValues() as $fieldValue) {
             if (!$fieldValue instanceof ElementQuery) {
                 continue;
             }
 
             foreach ($fieldValue->all() as $e) {
+                if (!$e->id) {
+                    Craft::warning('Skipping Element with null ID — likely a Matrix block or unsaved entry.', __METHOD__);
+                    continue;
+                }
+
                 if ($e instanceof NestedElementInterface && $e->getOwnerId()) {
                     $this->restrictMutationFieldsForElement($e);
                 } elseif ($e instanceof Entry) {
-                    if (!$e->id) {
-                        Craft::warning('Skipping Entry with null ID — likely a Matrix block.', __METHOD__);
-                        continue;
-                    }
-
                     $this->_ensureValidEntry($e->id, $element->siteId);
                 } elseif ($e instanceof Asset) {
                     $this->_ensureValidAsset($e->id);
