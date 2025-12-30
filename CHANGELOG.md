@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## 3.0.0 - 2025-12-30
+
+### Added
+
+- Added ability to set section on dedicated sections queries ([#172](https://github.com/jamesedmonston/graphql-authentication/pull/172))
+
+### Fixed
+
+- Fixed 2FA ([#159](https://github.com/jamesedmonston/graphql-authentication/issues/159))
+- Fixed error handling for `deferPublicRegistrationPassword` setting ([#154](https://github.com/jamesedmonston/graphql-authentication/issues/154))
+- Fixed some mutations not showing in schema ([#178](https://github.com/jamesedmonston/graphql-authentication/issues/178))
+- Fixed `users.deactivateByDefault` setting not being respected ([#174](https://github.com/jamesedmonston/graphql-authentication/issues/174))
+- Fixed issue with access control panel permissions on authentication ([#177](https://github.com/jamesedmonston/graphql-authentication/pull/177), fixes [#176](https://github.com/jamesedmonston/graphql-authentication/issues/176))
+- Fixed resolvers not being attached correctly (should use `resolve` method) ([#171](https://github.com/jamesedmonston/graphql-authentication/pull/171))
+- Fixed assumption that public schema has ID of 1 ([#170](https://github.com/jamesedmonston/graphql-authentication/pull/170))
+- Fixed deprecation warning ([#169](https://github.com/jamesedmonston/graphql-authentication/pull/169))
+- Fixed section ID checking logic for entries ([#164](https://github.com/jamesedmonston/graphql-authentication/pull/164), fixes [#163](https://github.com/jamesedmonston/graphql-authentication/issues/163))
+- Fixed issue with restricting mutation fields for elements without ID
+
 ## 3.0.0-RC5 - 2025-02-06
 
 ### Fixed
