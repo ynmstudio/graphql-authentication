@@ -230,6 +230,8 @@ class GraphqlAuthentication extends Plugin
     {
         if (Craft::$app->getUser()->getIsAdmin()) {
             $event->rules['POST graphql-authentication/settings'] = 'graphql-authentication/settings/save';
+            $event->rules['POST graphql-authentication/settings/save-user-group'] = 'graphql-authentication/settings/save-user-group';
+            $event->rules['graphql-authentication/settings/user-group/<id:\d+>'] = 'graphql-authentication/settings/edit-user-group';
             $event->rules['graphql-authentication/settings'] = 'graphql-authentication/settings/index';
         }
     }
