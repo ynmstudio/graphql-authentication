@@ -10,6 +10,8 @@ use craft\records\GqlSchema as GqlSchemaRecord;
 use craft\web\Controller;
 use jamesedmonston\graphqlauthentication\GraphqlAuthentication;
 use yii\web\HttpException;
+use yii\web\NotFoundHttpException;
+use yii\web\Response;
 
 class SettingsController extends Controller
 {
@@ -119,6 +121,7 @@ class SettingsController extends Controller
         $entryMutations = null;
         $assetQueries = null;
         $assetMutations = null;
+        $userGroupsTable = [];
 
         if ($settings->permissionType === 'single' && $settings->schemaName) {
             if ($settings->schemaName === 'public') {
@@ -136,6 +139,37 @@ class SettingsController extends Controller
         }
 
         if ($settings->permissionType === 'multiple') {
+            $userGroupsTable = [];
+            $schemaLabelMap = [];
+
+            foreach ($schemaOptions as $opt) {
+                $schemaLabelMap[$opt['value']] = $opt['label'];
+            }
+
+            $siteLabelMap = [];
+
+            foreach ($siteOptions as $opt) {
+                $siteLabelMap[$opt['value']] = $opt['label'];
+            }
+
+            foreach ($userGroups as $userGroup) {
+                $groupKey = 'group-' . $userGroup->id;
+                $groupData = $settings->granularSchemas[$groupKey] ?? [];
+                $schemaName = $groupData['schemaName'] ?? '';
+                $siteId = $groupData['siteId'] ?? '';
+                $allowRegistration = !empty($groupData['allowRegistration']);
+                $schemaLabel = $schemaLabelMap[$schemaName] ?? ($schemaName ?: '-');
+                $siteLabel = $siteId === '' ? 'All Sites' : ($siteLabelMap[$siteId] ?? '-');
+                $userGroupsTable[] = [
+                    'id' => $userGroup->id,
+                    'name' => $userGroup->name,
+                    'groupKey' => $groupKey,
+                    'schemaLabel' => $schemaLabel,
+                    'siteLabel' => $siteLabel,
+                    'registrationLabel' => $allowRegistration ? 'Enabled' : 'Disabled',
+                ];
+            }
+
             foreach ($userGroups as $userGroup) {
                 $schemaName = $settings->granularSchemas['group-' . $userGroup->id]['schemaName'] ?? null;
 
@@ -178,6 +212,7 @@ class SettingsController extends Controller
             'tabs',
             'settings',
             'userOptions',
+            'userGroupsTable',
             'siteOptions',
             'schemaOptions',
             'entryQueries',
@@ -294,5 +329,145 @@ class SettingsController extends Controller
             'assetQueries',
             'assetMutations'
         );
+    }
+
+    /**
+     * Edit a single user group's GraphQL authentication settings.
+     *
+     * @param int $id User group ID
+     * @return Response
+     * @throws HttpException
+     * @throws NotFoundHttpException
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionEditUserGroup(int $id): Response
+    {
+        if (!Craft::$app->getUser()->getIsAdmin()) {
+            throw new HttpException(403);
+        }
+
+        $userGroupsService = Craft::$app->getUserGroups();
+        $userGroup = $userGroupsService->getGroupById($id);
+        if ($userGroup === null) {
+            throw new NotFoundHttpException('User group not found');
+        }
+
+        $settings = GraphqlAuthentication::$settings;
+        $groupKey = 'group-' . $id;
+        $groupSettings = $settings->granularSchemas[$groupKey] ?? [];
+
+        $sitesService = Craft::$app->getSites();
+        $sites = $sitesService->getAllSites();
+        $siteOptions = [['label' => 'All Sites', 'value' => '']];
+        foreach ($sites as $site) {
+            $siteOptions[] = ['label' => $site->name, 'value' => $site->id];
+        }
+
+        $gqlService = Craft::$app->getGql();
+        $schemas = $gqlService->getSchemas();
+        $publicSchema = $gqlService->getPublicSchema();
+        $schemaOptions = [['label' => '-', 'value' => '']];
+        foreach ($schemas as $schema) {
+            $schemaOptions[] = [
+                'label' => $schema->isPublic ? 'Public' : $schema->name,
+                'value' => $schema->isPublic ? 'public' : $schema->name,
+            ];
+        }
+        asort($schemaOptions);
+
+        $entryQueries = [];
+        $entryMutations = [];
+        $assetQueries = [];
+        $assetMutations = [];
+        $schemaName = $groupSettings['schemaName'] ?? null;
+        if ($schemaName) {
+            if ($schemaName === 'public') {
+                $schema = $publicSchema;
+            } else {
+                $schemaId = GqlSchemaRecord::find()->select(['id'])->where(['name' => $schemaName])->scalar();
+                $schema = $schemaId ? $gqlService->getSchemaById($schemaId) : null;
+            }
+            if ($schema) {
+                $perms = $this->_getSchemaPermissions($schema);
+                $entryQueries = $perms['entryQueries'];
+                $entryMutations = $perms['entryMutations'];
+                $assetQueries = $perms['assetQueries'];
+                $assetMutations = $perms['assetMutations'];
+            }
+        }
+
+        $crumbs = [
+            ['label' => 'Settings', 'url' => UrlHelper::cpUrl('settings')],
+            ['label' => 'GraphQL Authentication', 'url' => UrlHelper::cpUrl('graphql-authentication/settings')],
+            ['label' => $userGroup->name, 'url' => UrlHelper::cpUrl('graphql-authentication/settings/user-group/' . $id)],
+        ];
+
+        return $this->renderTemplate('graphql-authentication/settings/user-group-edit', compact(
+            'userGroup',
+            'groupKey',
+            'groupSettings',
+            'schemaOptions',
+            'siteOptions',
+            'entryQueries',
+            'entryMutations',
+            'assetQueries',
+            'assetMutations',
+            'crumbs'
+        ));
+    }
+
+    /**
+     * Save a single user group's GraphQL authentication settings.
+     *
+     * @return Response|null
+     * @throws HttpException
+     */
+    public function actionSaveUserGroup(): ?Response
+    {
+        $this->requirePostRequest();
+        if (!Craft::$app->getUser()->getIsAdmin()) {
+            throw new HttpException(403);
+        }
+
+        $userId = $this->request->getBodyParam('userGroupId');
+        if ($userId === null || $userId === '') {
+            return $this->redirect(UrlHelper::cpUrl('graphql-authentication/settings'));
+        }
+        $id = (int) $userId;
+        $groupKey = 'group-' . $id;
+
+        $settingsData = $this->request->getBodyParam('settings', []);
+        $submittedGroup = $settingsData['granularSchemas'][$groupKey] ?? [];
+        if (empty($submittedGroup)) {
+            return $this->redirect(UrlHelper::cpUrl('graphql-authentication/settings'));
+        }
+
+        $plugin = GraphqlAuthentication::$plugin;
+        $currentSettings = $plugin->getSettings();
+        $granularSchemas = $currentSettings->granularSchemas ?? [];
+        $granularSchemas[$groupKey] = array_merge(
+            $granularSchemas[$groupKey] ?? [],
+            [
+                'schemaName' => $submittedGroup['schemaName'] ?? null,
+                'allowRegistration' => !empty($submittedGroup['allowRegistration']),
+                'siteId' => $submittedGroup['siteId'] ?? null,
+                'entryQueries' => $submittedGroup['entryQueries'] ?? [],
+                'entryMutations' => $submittedGroup['entryMutations'] ?? [],
+                'assetQueries' => $submittedGroup['assetQueries'] ?? [],
+                'assetMutations' => $submittedGroup['assetMutations'] ?? [],
+            ]
+        );
+
+        $toSave = $currentSettings->toArray();
+        $toSave['granularSchemas'] = $granularSchemas;
+        $success = Craft::$app->getPlugins()->savePluginSettings($plugin, $toSave);
+
+        if ($success) {
+            Craft::$app->getSession()->setNotice(Craft::t('app', 'Plugin settings saved.'));
+        } else {
+            Craft::$app->getSession()->setError(Craft::t('app', 'Couldn’t save plugin settings.'));
+        }
+
+        return $this->redirect(UrlHelper::cpUrl('graphql-authentication/settings'));
     }
 }

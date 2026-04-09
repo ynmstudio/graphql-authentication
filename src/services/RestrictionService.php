@@ -13,22 +13,13 @@ use craft\elements\User;
 use craft\events\ExecuteGqlQueryEvent;
 use craft\events\ModelEvent;
 use craft\events\RegisterGqlQueriesEvent;
-use craft\gql\arguments\elements\Asset as AssetArguments;
-use craft\gql\arguments\elements\Entry as EntryArguments;
-use craft\gql\arguments\elements\GlobalSet as GlobalSetArguments;
-use craft\gql\interfaces\elements\Asset as AssetInterface;
-use craft\gql\interfaces\elements\Entry as EntryInterface;
-use craft\gql\interfaces\elements\GlobalSet as GlobalSetInterface;
-use craft\helpers\Gql as GqlHelper;
 use craft\helpers\StringHelper;
 use craft\models\GqlSchema;
-use craft\services\Entries;
 use craft\services\Gql;
 use GraphQL\Error\Error;
 use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\Parser;
-use GraphQL\Type\Definition\Type;
 use InvalidArgumentException;
 use jamesedmonston\graphqlauthentication\GraphqlAuthentication;
 use jamesedmonston\graphqlauthentication\resolvers\Asset as AssetResolver;
@@ -302,12 +293,22 @@ class RestrictionService extends Component
 
     private function restrictMutationFieldsForElement(ElementInterface $element): void
     {
+        if (!$element->id) {
+            Craft::warning('Skipping Element with null ID — likely a Matrix block or unsaved entry.', __METHOD__);
+            return;
+        }
+
         foreach ($element->getFieldValues() as $fieldValue) {
             if (!$fieldValue instanceof ElementQuery) {
                 continue;
             }
 
             foreach ($fieldValue->all() as $e) {
+                if (!$e->id) {
+                    Craft::warning('Skipping Element with null ID — likely a Matrix block or unsaved entry.', __METHOD__);
+                    continue;
+                }
+
                 if ($e instanceof NestedElementInterface && $e->getOwnerId()) {
                     $this->restrictMutationFieldsForElement($e);
                 } elseif ($e instanceof Entry) {

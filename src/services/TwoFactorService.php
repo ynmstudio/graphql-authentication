@@ -92,10 +92,6 @@ class TwoFactorService extends Component
      */
     public function registerGqlMutations(RegisterGqlMutationsEvent $event)
     {
-        if (!GraphqlAuthentication::$tokenService->getHeaderToken()) {
-            return;
-        }
-
         $settings = GraphqlAuthentication::$settings;
 
         if (!$settings->allowTwoFactorAuthentication) {
@@ -108,26 +104,6 @@ class TwoFactorService extends Component
         $usersService = Craft::$app->getUsers();
         $permissionsService = Craft::$app->getUserPermissions();
 
-        $event->mutations['generateTwoFactorQrCode'] = [
-            'description' => 'Generates Two-Factor QR Code data URI. Returns string.',
-            'type' => Type::nonNull(Type::string()),
-            'args' => [],
-            'resolve' => function($source, array $arguments) use ($tokenService) {
-                $user = $tokenService->getUserFromToken();
-                return $this->generateQrCode($user);
-            },
-        ];
-
-        $event->mutations['generateTwoFactorSecretCode'] = [
-            'description' => 'Generates Two-Factor secret code. Returns string.',
-            'type' => Type::nonNull(Type::string()),
-            'args' => [],
-            'resolve' => function($source, array $arguments) use ($tokenService) {
-                $user = $tokenService->getUserFromToken();
-                return $this->secret($user);
-            },
-        ];
-
         $event->mutations['verifyTwoFactor'] = [
             'description' => 'Verifies Two-Factor code. Returns user and token.',
             'type' => Type::nonNull(Auth::getType()),
@@ -135,11 +111,13 @@ class TwoFactorService extends Component
                 'email' => Type::nonNull(Type::string()),
                 'password' => Type::nonNull(Type::string()),
                 'code' => Type::nonNull(Type::string()),
+                'sessionOnly' => Type::boolean(),
             ],
             'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService, $permissionsService) {
                 $email = $arguments['email'];
                 $password = $arguments['password'];
                 $code = $arguments['code'];
+                $sessionOnly = $arguments['sessionOnly'] ?? false;
 
                 if (!$user = $usersService->getUserByUsernameOrEmail($email)) {
                     $errorService->throw($settings->invalidLogin);
@@ -198,9 +176,33 @@ class TwoFactorService extends Component
                 }
 
                 $usersService->handleValidLogin($user);
-                $token = $tokenService->create($user, $schemaId);
+                $token = $tokenService->create($user, $schemaId, $sessionOnly);
 
                 return GraphqlAuthentication::$userService->getResponseFields($user, $schemaId, $token);
+            },
+        ];
+
+        if (!GraphqlAuthentication::$tokenService->getHeaderToken()) {
+            return;
+        }
+
+        $event->mutations['generateTwoFactorQrCode'] = [
+            'description' => 'Generates Two-Factor QR Code data URI. Returns string.',
+            'type' => Type::nonNull(Type::string()),
+            'args' => [],
+            'resolve' => function($source, array $arguments) use ($tokenService) {
+                $user = $tokenService->getUserFromToken();
+                return $this->generateQrCode($user);
+            },
+        ];
+
+        $event->mutations['generateTwoFactorSecretCode'] = [
+            'description' => 'Generates Two-Factor secret code. Returns string.',
+            'type' => Type::nonNull(Type::string()),
+            'args' => [],
+            'resolve' => function($source, array $arguments) use ($tokenService) {
+                $user = $tokenService->getUserFromToken();
+                return $this->secret($user);
             },
         ];
 
@@ -248,7 +250,7 @@ class TwoFactorService extends Component
      *
      * @param User $user
      */
-    private function twoFactorEnabled(User $user) {
+    public function twoFactorEnabled(User $user) {
         $secret = $this->secretFromDb($user);
         return (bool) $secret;
     }
