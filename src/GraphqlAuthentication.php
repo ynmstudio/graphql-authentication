@@ -197,12 +197,8 @@ class GraphqlAuthentication extends Plugin
         self::$microsoftService = $this->microsoft;
         self::$errorService = $this->error;
         self::$magicService = $this->magic;
+        self::$twoFactorService = $this->twoFactor;
         self::$settings = $this->getSettings();
-
-        if (Craft::$app->plugins->isPluginEnabled('two-factor-authentication')) {
-            $this->twoFactor->init();
-            self::$twoFactorService = $this->twoFactor;
-        }
 
         Event::on(
             UrlManager::class,
@@ -234,6 +230,8 @@ class GraphqlAuthentication extends Plugin
     {
         if (Craft::$app->getUser()->getIsAdmin()) {
             $event->rules['POST graphql-authentication/settings'] = 'graphql-authentication/settings/save';
+            $event->rules['POST graphql-authentication/settings/save-user-group'] = 'graphql-authentication/settings/save-user-group';
+            $event->rules['graphql-authentication/settings/user-group/<id:\d+>'] = 'graphql-authentication/settings/edit-user-group';
             $event->rules['graphql-authentication/settings'] = 'graphql-authentication/settings/index';
         }
     }

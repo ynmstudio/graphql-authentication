@@ -2,8 +2,6 @@
 
 namespace jamesedmonston\graphqlauthentication\services;
 
-use born05\twofactorauthentication\Plugin as TwoFactorAuth;
-use born05\twofactorauthentication\services\Verify;
 use Craft;
 use craft\base\Component;
 use craft\base\Field;
@@ -17,10 +15,8 @@ use craft\gql\resolvers\mutations\Asset;
 use craft\gql\types\input\File;
 use craft\helpers\Template;
 use craft\records\GqlSchema as GqlSchemaRecord;
-use craft\services\Fields;
 use craft\services\Gql;
 use GraphQL\Error\Error;
-use GraphQL\GraphQL;
 use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Definition\Type;
 use jamesedmonston\graphqlauthentication\gql\Auth;
@@ -86,7 +82,6 @@ class UserService extends Component
 
         $elementsService = Craft::$app->getElements();
         $usersService = Craft::$app->getUsers();
-        $permissionsService = Craft::$app->getUserPermissions();
         $volumesService = Craft::$app->getVolumes();
         $projectConfigService = Craft::$app->getProjectConfig();
         $fieldsService = Craft::$app->getFields();
@@ -114,7 +109,7 @@ class UserService extends Component
                 'password' => Type::nonNull(Type::string()),
                 'sessionOnly' => Type::boolean(),
             ],
-            'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService, $permissionsService) {
+            'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $usersService) {
                 $email = $arguments['email'];
                 $password = $arguments['password'];
                 $sessionOnly = $arguments['sessionOnly'] ?? false;
@@ -127,15 +122,7 @@ class UserService extends Component
                     $errorService->throw($settings->userNotActivated);
                 }
 
-                $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                if (!in_array('accessCp', $userPermissions)) {
-                    $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
-                }
-
                 if (!$user->authenticate($password)) {
-                    $permissionsService->saveUserPermissions($user->id, $userPermissions);
-
                     switch ($user->authError) {
                         case User::AUTH_PASSWORD_RESET_REQUIRED:
                             $usersService->sendPasswordResetEmail($user);
@@ -155,7 +142,6 @@ class UserService extends Component
                     }
                 }
 
-                $permissionsService->saveUserPermissions($user->id, $userPermissions);
                 $schemaId = GqlSchemaRecord::find()->select(['id'])->where(['name' => $settings->schemaName])->scalar();
 
                 if ($settings->permissionType === 'multiple') {
@@ -173,31 +159,27 @@ class UserService extends Component
 
                 $requiresTwoFactor = false;
 
-                // todo: add 2FA support
-                //                if (
-                //                    Craft::$app->plugins->isPluginEnabled('two-factor-authentication') &&
-                //                    $settings->allowTwoFactorAuthentication
-                //                ) {
-                //                    /** @var Verify $verifyService */
-                //                    $verifyService = TwoFactorAuth::$plugin->verify;
-                //                    $requiresTwoFactor = $verifyService->isEnabled($user);
-                //                }
-                //
-                //                if ($requiresTwoFactor) {
-                //                    $token = [
-                //                        'jwt' => null,
-                //                        'jwtExpiresAt' => null,
-                //                        'refreshToken' => null,
-                //                        'refreshTokenExpiresAt' => null,
-                //                    ];
-                //                } else {
-                $this->_updateLastLogin($user);
-                $token = $tokenService->create($user, $schemaId, $sessionOnly);
-                //                }
+               if ($settings->allowTwoFactorAuthentication) {
+                   $requiresTwoFactor = GraphqlAuthentication::$twoFactorService->twoFactorEnabled($user);
+               }
+
+                if ($requiresTwoFactor) {
+                    $token = [
+                        'jwt' => null,
+                        'jwtExpiresAt' => null,
+                        'refreshToken' => null,
+                        'refreshTokenExpiresAt' => null,
+                    ];
+                } else {
+                    $this->_updateLastLogin($user);
+                    $token = $tokenService->create($user, $schemaId, $sessionOnly);
+                }
 
                 return $this->getResponseFields($user, $schemaId, $token, $requiresTwoFactor);
             },
         ];
+
+        $deferPublicRegistrationPassword = Craft::$app->getConfig()->getGeneral()->deferPublicRegistrationPassword;
 
         if ($settings->permissionType === 'single' && $settings->allowRegistration) {
             $event->mutations['register'] = [
@@ -206,7 +188,7 @@ class UserService extends Component
                 'args' => array_merge(
                     [
                         'email' => Type::nonNull(Type::string()),
-                        'password' => Type::nonNull(Type::string()),
+                        'password' => $deferPublicRegistrationPassword ? Type::string() : Type::nonNull(Type::string()),
                         'username' => Type::string(),
                         'fullName' => Type::string(),
                         'preferredLanguage' => Type::string(),
@@ -223,8 +205,12 @@ class UserService extends Component
                     }
 
                     $user = $this->create($arguments, $settings->userGroup);
-                    $token = $tokenService->create($user, $schemaId, $sessionOnly);
 
+                    if ($user->status !== 'active') {
+                        $errorService->throw($settings->userCreatedNotActivated);
+                    }
+
+                    $token = $tokenService->create($user, $schemaId, $sessionOnly);
                     return $this->getResponseFields($user, $schemaId, $token);
                 },
             ];
@@ -247,7 +233,7 @@ class UserService extends Component
                     'args' => array_merge(
                         [
                             'email' => Type::nonNull(Type::string()),
-                            'password' => Type::nonNull(Type::string()),
+                            'password' => $deferPublicRegistrationPassword ? Type::string() : Type::nonNull(Type::string()),
                             'username' => Type::string(),
                             'fullName' => Type::string(),
                             'preferredLanguage' => Type::string(),
@@ -265,8 +251,12 @@ class UserService extends Component
                         }
 
                         $user = $this->create($arguments, $userGroup->id);
-                        $token = $tokenService->create($user, $schemaId, $sessionOnly);
 
+                        if ($user->status !== 'active') {
+                            $errorService->throw($settings->userCreatedNotActivated);
+                        }
+
+                        $token = $tokenService->create($user, $schemaId, $sessionOnly);
                         return $this->getResponseFields($user, $schemaId, $token);
                     },
                 ];
@@ -388,7 +378,7 @@ class UserService extends Component
                     'newPassword' => Type::nonNull(Type::string()),
                     'confirmPassword' => Type::nonNull(Type::string()),
                 ],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService, $permissionsService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
 
                     $currentPassword = $arguments['currentPassword'];
@@ -399,20 +389,11 @@ class UserService extends Component
                         $errorService->throw($settings->invalidPasswordMatch);
                     }
 
-                    $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                    if (!in_array('accessCp', $userPermissions)) {
-                        $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
-                    }
-
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
                     if (!$user->authenticate($currentPassword)) {
-                        $permissionsService->saveUserPermissions($user->id, $userPermissions);
                         $errorService->throw($settings->invalidPasswordUpdate);
                     }
-
-                    $permissionsService->saveUserPermissions($user->id, $userPermissions);
 
                     $user->newPassword = $newPassword;
 
@@ -517,7 +498,7 @@ class UserService extends Component
                     'password' => Type::nonNull(Type::string()),
                     'confirmPassword' => Type::nonNull(Type::string()),
                 ],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $permissionsService, $usersService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
@@ -530,14 +511,7 @@ class UserService extends Component
                         }
                     }
 
-                    $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                    if (!in_array('accessCp', $userPermissions)) {
-                        $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
-                    }
-
                     if (!$user->authenticate($password)) {
-                        $permissionsService->saveUserPermissions($user->id, $userPermissions);
                         $errorService->throw($settings->invalidLogin);
                     }
 
@@ -551,18 +525,12 @@ class UserService extends Component
                 'description' => 'Deletes authenticated password-less user. Returns success message.',
                 'type' => Type::nonNull(Type::string()),
                 'args' => [],
-                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $permissionsService, $usersService) {
+                'resolve' => function($source, array $arguments) use ($settings, $tokenService, $errorService, $elementsService, $usersService) {
                     $user = $tokenService->getUserFromToken();
                     $user = $usersService->getUserByUsernameOrEmail($user->email);
 
                     if ($user->password) {
                         $errorService->throw($settings->userHasPassword);
-                    }
-
-                    $userPermissions = $permissionsService->getPermissionsByUserId($user->id);
-
-                    if (!in_array('accessCp', $userPermissions)) {
-                        $permissionsService->saveUserPermissions($user->id, array_merge($userPermissions, ['accessCp']));
                     }
 
                     $elementsService->deleteElement($user);
@@ -585,7 +553,7 @@ class UserService extends Component
     public function create(array $arguments, int $userGroup, bool $social = false): User
     {
         $email = $arguments['email'];
-        $password = $arguments['password'];
+        $password = $arguments['password'] ?? null;
         $username = $arguments['username'] ?? null;
         $fullName = $arguments['fullName'] ?? null;
 
@@ -593,6 +561,10 @@ class UserService extends Component
         $user->username = $email;
         $user->email = $email;
         $user->active = true;
+
+        if ($password) {
+            $user->newPassword = $password;
+        }
 
         if ($username) {
             $user->username = $username;
@@ -602,14 +574,11 @@ class UserService extends Component
             $user->fullName = $fullName;
         }
 
-        if ($password) {
-            $user->newPassword = $password;
-        }
-
         $this->_saveCustomFields($arguments, $user);
 
         $projectConfigService = Craft::$app->getProjectConfig();
         $requiresVerification = $projectConfigService->get('users.requireEmailVerification');
+        $deactivateByDefault = $projectConfigService->get('users.deactivateByDefault');
         $suspendByDefault = $projectConfigService->get('users.suspendByDefault');
 
         $settings = GraphqlAuthentication::$settings;
@@ -622,6 +591,11 @@ class UserService extends Component
 
         if ($social && $skipSocialActivation) {
             $user->active = true;
+            $user->pending = false;
+        }
+
+        if ($deactivateByDefault) {
+            $user->active = false;
             $user->pending = false;
         }
 
